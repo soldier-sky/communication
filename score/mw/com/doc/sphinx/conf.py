@@ -116,9 +116,12 @@ html_css_files = [
 
 # -- Breathe configuration --
 # Doxygen XML output path (provided by sphinx_docs_library)
-# Path is relative to each .rst file location
+# Path is relative to the conf.py file location
+_conf_dir = Path(__file__).parent.absolute()
+_xml_path = _conf_dir / ".." / ".." / "design" / "doxygen_build" / "xml"
+
 breathe_projects = {
-    "com": "../../design/doxygen_build/xml",
+    "com": str(_xml_path.resolve()),
 }
 
 # Set the default project for breathe directives

@@ -21,14 +21,16 @@ build:
     - gnupg
   jobs:
     pre_install:
-      # Install Bazelisk (Bazel version manager)
-      - curl -Lo /tmp/bazelisk https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
-      - chmod +x /tmp/bazelisk
-      - sudo mv /tmp/bazelisk /usr/local/bin/bazel
+      # Install Bazelisk (Bazel version manager) to local bin directory
+      - mkdir -p $HOME/.local/bin
+      - curl -Lo $HOME/.local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
+      - chmod +x $HOME/.local/bin/bazel
+      - export PATH="$HOME/.local/bin:$PATH"
       - bazel --version
     pre_build:
       # Run Bazel to generate documentation artifacts
       # This generates: Doxygen XML, API RST files, and copies README.md
+      - export PATH="$HOME/.local/bin:$PATH"
       - bazel build //score/mw/com/doc/sphinx:generate_api_rst
       # Copy generated artifacts to locations where Sphinx expects them
       - cp -f score/mw/com/README.md score/mw/com/doc/sphinx/README.md

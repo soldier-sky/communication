@@ -1,5 +1,12 @@
 # Read the Docs configuration file for Sphinx builds
 # See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
+#
+# Project: SCORE Communication
+# Recommended URL: https://score-communication.readthedocs.io/
+# (Configure project slug in Read the Docs dashboard: Admin → Advanced Settings)
+#
+# This configuration installs Bazel and runs the full build pipeline on Read the Docs.
+# Generated artifacts (Doxygen XML, API RST files, README) are created during the build.
 
 # Required
 version: 2
@@ -10,8 +17,24 @@ build:
   tools:
     python: "3.12"
   apt_packages:
-    - doxygen
-    - graphviz
+    - curl
+    - gnupg
+  jobs:
+    pre_install:
+      # Install Bazelisk (Bazel version manager)
+      - curl -Lo /tmp/bazelisk https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
+      - chmod +x /tmp/bazelisk
+      - sudo mv /tmp/bazelisk /usr/local/bin/bazel
+      - bazel --version
+    pre_build:
+      # Run Bazel to generate documentation artifacts
+      # This generates: Doxygen XML, API RST files, and copies README.md
+      - bazel build //score/mw/com/doc/sphinx:generate_api_rst
+      # Copy generated artifacts to locations where Sphinx expects them
+      - cp -f score/mw/com/README.md score/mw/com/doc/sphinx/README.md
+      - mkdir -p score/mw/com/doc/sphinx/generated
+      - cp -f bazel-bin/score/mw/com/doc/sphinx/generated/*.rst score/mw/com/doc/sphinx/generated/
+      # Doxygen XML is automatically available via sphinx_docs_library
 
 # Build documentation in the score/mw/com/doc/sphinx directory with Sphinx
 sphinx:

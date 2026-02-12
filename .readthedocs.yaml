@@ -34,7 +34,9 @@ build:
       - cp -f score/mw/com/README.md score/mw/com/doc/sphinx/README.md
       - mkdir -p score/mw/com/doc/sphinx/generated
       - cp -f bazel-bin/score/mw/com/doc/sphinx/generated/*.rst score/mw/com/doc/sphinx/generated/
-      # Doxygen XML is automatically available via sphinx_docs_library
+      # Copy Doxygen XML to the location where Breathe expects it
+      - mkdir -p score/mw/com/design/doxygen_build/xml
+      - cp -rf bazel-bin/score/mw/com/design/doxygen_build/xml/* score/mw/com/design/doxygen_build/xml/
 
 # Build documentation in the score/mw/com/doc/sphinx directory with Sphinx
 sphinx:

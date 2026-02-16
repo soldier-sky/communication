@@ -11,7 +11,7 @@
 # Required
 version: 2
 
-# Set the OS, Python version and other tools you might need
+# Set the OS, Python version and other Bazel dependencies for the build environment
 build:
   os: ubuntu-22.04
   tools:
@@ -27,21 +27,16 @@ build:
       - chmod +x $HOME/.local/bin/bazel
       - $HOME/.local/bin/bazel --version
     pre_build:
-      # Run Bazel to generate documentation artifacts
-      # This generates: Doxygen XML, API RST files, and copies README.md
-      - $HOME/.local/bin/bazel build //score/mw/com/doc/sphinx:generate_api_rst
-      # Copy generated artifacts to locations where Sphinx expects them
-      - cp -f score/mw/com/README.md score/mw/com/doc/sphinx/README.md
-      - mkdir -p score/mw/com/doc/sphinx/generated
-      - cp -f bazel-bin/score/mw/com/doc/sphinx/generated/*.rst score/mw/com/doc/sphinx/generated/
-      # Copy Doxygen XML to the location where Breathe expects it
-      - mkdir -p score/mw/com/design/doxygen_build/xml
-      - cp -rf bazel-bin/score/mw/com/design/doxygen_build/xml/* score/mw/com/design/doxygen_build/xml/
+      # Build complete documentation with Bazel (includes Doxygen, API RST generation, and Sphinx HTML build)
+      - $HOME/.local/bin/bazel build //score/mw/com/doc/sphinx:docs
+      # Copy built HTML to _readthedocs/html/ where Read the Docs expects it
+      - mkdir -p _readthedocs/html
+      - cp -r bazel-bin/score/mw/com/doc/sphinx/docs/* _readthedocs/html/
 
-# Build documentation in the score/mw/com/doc/sphinx directory with Sphinx
-sphinx:
-  configuration: score/mw/com/doc/sphinx/conf.py
-  fail_on_warning: false
+# Use pre-built HTML from Bazel instead of running Sphinx on Read the Docs
+# sphinx:
+#   configuration: score/mw/com/doc/sphinx/conf.py
+#   fail_on_warning: false
 
 # Optionally build your docs in additional formats such as PDF and ePub
 formats:

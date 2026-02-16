@@ -33,10 +33,11 @@ build:
       - mkdir -p _readthedocs/html
       - cp -r bazel-bin/score/mw/com/doc/sphinx/docs/* _readthedocs/html/
 
-# Use pre-built HTML from Bazel instead of running Sphinx on Read the Docs
-# sphinx:
-#   configuration: score/mw/com/doc/sphinx/conf.py
-#   fail_on_warning: false
+# Sphinx configuration is required by Read the Docs, but the actual build is done by Bazel
+# Read the Docs will find the pre-built HTML in _readthedocs/html/ and use that instead
+sphinx:
+  configuration: score/mw/com/doc/sphinx/conf.py
+  fail_on_warning: false
 
 # Optionally build your docs in additional formats such as PDF and ePub
 formats:

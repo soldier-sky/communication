@@ -11,6 +11,10 @@
 # Required
 version: 2
 
+# Version control settings (optional - RTD will build all active versions by default)
+# To control which branches/tags are built, configure in RTD dashboard: Admin → Versions
+# URLs will be: /en/latest/, /en/stable/, /en/v1.0.0/, etc.
+
 # Set the OS, Python version and other Bazel dependencies for the build environment
 build:
   os: ubuntu-22.04

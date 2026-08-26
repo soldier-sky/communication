@@ -1,0 +1,47 @@
+@startuml e2e_context_diagram
+title "E2E Responsibility Layering (Events/Fields)"
+skinparam stereotypePosition bottom
+
+actor "Application" as APP
+
+package "mw::com" as mw_com <<SEooC>> {
+
+    component "Communication Management" as COMM_MGMT <<binding-independent>>
+
+    component "E2E Manager" as E2E_MGR <<binding-independent>> {
+        component "Protect (SkeletonEventBase)" as PROTECT
+        component "Check (ProxyEventBase)" as CHECK
+        component "State Machine" as SM <<Ticket 2>>
+    }
+
+    interface "Binding Interface Contract" as BINDING_IF
+
+    component "LoLa Binding" as LOLA <<binding-specific>>
+    component "SOME/IP Binding" as SOMEIP <<binding-specific, future>>
+}
+
+component "Transport" as TRANSPORT
+
+APP -down-> COMM_MGMT
+COMM_MGMT -down-> E2E_MGR
+CHECK -right-> SM : RawE2ECheckResult\n(out of scope here, see SWP-279114)
+E2E_MGR -down-> BINDING_IF
+BINDING_IF -down-> LOLA
+BINDING_IF -down-> SOMEIP
+LOLA -down-> TRANSPORT
+SOMEIP -down-> TRANSPORT
+
+note right of E2E_MGR
+  Binding-independent: owns E2EProtectContext (sender)
+  and E2E check context (receiver). Binding is stateless
+  w.r.t. E2E communication supervision.
+end note
+
+note right of BINDING_IF
+  Binding only places/extracts precomputed header bytes
+  at the transport-specific offset; it never computes
+  E2E_PXXProtect()/E2E_PXXCheck() itself.
+  ToDo: Need to align with revised e2e responsibility layering.
+end note
+
+@enduml

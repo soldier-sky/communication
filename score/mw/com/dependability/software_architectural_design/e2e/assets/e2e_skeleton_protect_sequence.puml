@@ -1,0 +1,38 @@
+@startuml e2e_skeleton_protect_sequence
+title "Single-Sample Protect on Send() (Skeleton side)"
+autonumber "<b>[00]"
+skinparam stereotypePosition bottom
+
+actor "Provider Application" as APP
+participant "SkeletonEventBase" as SKEL
+participant "E2EProtectContext" as PROTECT
+participant "SkeletonEventBinding\n(e.g. LoLa)" as BINDING
+database "EventDataStorage" as DATA
+database "EventDataE2EHeaderStorage" as HDR
+
+APP -> SKEL ++: Send(sample)
+
+SKEL -> DATA: write sample at slot_index
+SKEL -> PROTECT ++: Protect(slot_index, data_view)
+
+PROTECT -> PROTECT: E2E_PXXProtect()\n(increment counter, compute CRC)
+PROTECT -> HDR: write header bytes at slot_index
+PROTECT --> SKEL --: done
+
+SKEL -> BINDING ++: Send(slot_index)
+note right of BINDING
+  Binding places the already-computed header bytes
+  at its transport-specific offset; it does not call
+  E2E_PXXProtect() itself.
+end note
+BINDING --> SKEL --: score::Result<void>
+SKEL --> APP --: score::Result<void>
+
+note over PROTECT
+  One E2EProtectContext per SkeletonEvent, shared across
+  all consumers (no per-subscriber replication) — a shared
+  counter is required so all consumers observe the same
+  wire-level sequence.
+end note
+
+@enduml

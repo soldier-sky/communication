@@ -1,0 +1,44 @@
+@startuml e2e_proxy_check_sequence
+title "Single-Sample Check on GetNewSamples() (Proxy side)"
+autonumber "<b>[00]"
+skinparam stereotypePosition bottom
+
+actor "Consumer Application" as APP
+participant "ProxyEventBase" as PROXY
+participant "E2E Check Context" as CHECK
+participant "ProxyEventBinding\n(e.g. LoLa)" as BINDING
+database "EventDataStorage" as DATA
+database "EventDataE2EHeaderStorage" as HDR
+
+APP -> PROXY ++: GetNewSamples(callback)
+PROXY -> BINDING ++: CollectNewSamples()
+
+alt new sample available
+    BINDING -> DATA: read sample at slot_index
+    BINDING -> HDR: read header bytes at slot_index
+    BINDING --> PROXY --: sample + header bytes, new_data = true
+else no new sample this cycle
+    BINDING --> PROXY --: new_data = false
+end
+
+PROXY -> CHECK ++: Check(header bytes | no-new-data)
+CHECK -> CHECK: E2E_PXXCheck() -> RawE2ECheckResult
+CHECK --> PROXY --: RawE2ECheckResult\n(kOk/kRepeated/kWrongSequence/kError/kNoNewData/kNotAvailable)
+
+note right of CHECK
+  no-new-data is fed as its own explicit outcome
+  (kNoNewData), never skipped — the application must
+  treat it as "no trustworthy sample", not an implicit pass.
+end note
+
+PROXY --> APP --: callback(SamplePtr)
+
+note over CHECK
+  RawE2ECheckResult is the input to the windowed state
+  machine — SM design and E2EProfileCheckStatus derivation
+  are out of scope of this diagram (see Ticket 2).
+  One check context per consuming ProxyEvent instance,
+  independent of other consumers of the same SkeletonEvent.
+end note
+
+@enduml

@@ -21,16 +21,17 @@ section "com" {
         section "Configuration" {
 
             ScoreReq.CompReq E2EProfileConfigurablePerCommunicationElement {
-                description = """It shall be possible to configure the E2E profile, Data ID, and state-machine window/threshold parameters independently for each {{Event}}, {{Field}}, or {{Method}} for which E2E protection is enabled."""
+                description = """It shall be possible to configure, independently for each {{Event}}, {{Field}}, or {{Method}} for which E2E protection is enabled: the E2E profile, the Data ID, the {{MaxDeltaCounter}}, and the historical-health hysteresis parameters ({{ErrorIncrement}}, {{OkDecrement}}, {{ErrorThreshold}}, {{RecoveryThreshold}})."""
                 safety = ScoreReq.Asil.B
+                note = "MaxDeltaCounter and the hysteresis parameters are static configuration values supplied from the deployment model at startup, the same pattern already used for other mw::com configuration; RecoveryThreshold must be less than or equal to ErrorThreshold, the gap between the two forming the hysteresis band."
                 derived_from = [Communication.E2EProtectionForEvents@1, Communication.E2EProtectionForMethods@1]
                 version = 1
             }
 
             ScoreReq.CompReq PerConsumerE2ECheckOptOut {
-                description = """It shall be possible for a consuming {{ProxyEvent}} instance to opt out of running E2E check/state-machine supervision for an E2E-configured {{Event}} or {{Field}}, without affecting E2E supervision performed by any other consumer of the same event or field."""
+                description = """It shall be possible for a consuming {{ProxyEvent}} or {{ProxyField}} instance to independently disable, via its own {{DataIntegrityCheckEnabled}}, {{SequenceCheckEnabled}}, and {{HistoricalHealthTrackingEnabled}} configuration, any subset of data-integrity checking, sequence checking, and historical-health tracking for an E2E-configured {{Event}} or {{Field}}, without affecting E2E supervision performed by any other consumer of the same event or field."""
                 safety = ScoreReq.Asil.B
-                note = "Intended as a latency/CPU optimization for a consumer that does not need the E2E result, e.g. a high-rate QM-only consumer."
+                note = "Intended as a first-class configuration state (e.g. for a QM-only consumer with no use for the result), not merely a latency/CPU optimization for an outlier case. Enabling SequenceCheckEnabled or HistoricalHealthTrackingEnabled without DataIntegrityCheckEnabled where the profile requires it is a misconfiguration and shall be rejected at load time."
                 derived_from = [Communication.MixedCriticalityE2ESupervision@1]
                 version = 1
             }

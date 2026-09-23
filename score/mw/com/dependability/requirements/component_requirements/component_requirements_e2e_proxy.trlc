@@ -20,29 +20,40 @@ section "com" {
 
         section "Proxy_Side_Check_State" {
 
-            ScoreReq.CompReq ProxyEventOwnsE2ECheckContext {
-                description = """{{ProxyEventBase}} shall own exactly one E2E check and state-machine context per consuming {{ProxyEvent}} or {{ProxyField}} instance for which E2E supervision is enabled."""
+            ScoreReq.CompReq ProxyEventBindingOwnsE2ECheckContext {
+                description = """{{ProxyEventBinding}} shall own exactly one E2E check context (last accepted counter, CRC library context) per consuming {{ProxyEvent}} or {{ProxyField}} instance for which data-integrity or sequence checking is enabled, and shall invoke {{CheckMessage}} on it directly."""
                 safety = ScoreReq.Asil.B
+                note = "The check context is meaningless without the wire-format knowledge the binding already has (last accepted counter, CRC context), so it lives in the binding rather than in ProxyEventBase; see ProxyEventBaseOwnsE2EHealthContext for the binding-independent counterpart."
                 derived_from = [Communication.E2EProtectionForEvents@1, Communication.MixedCriticalityE2ESupervision@1]
                 version = 1
             }
 
-            ScoreReq.CompReq E2ESupervisionInvokedOnEveryGetNewSamplesCall {
-                description = """{{ProxyEventBase}} shall run the E2E check and state-machine update on every call to {{GetNewSamples}}, whether or not a new sample was received in that call."""
+            ScoreReq.CompReq ProxyEventBaseOwnsE2EHealthContext {
+                description = """{{ProxyEventBase}} shall own exactly one E2E historical-health context per consuming {{ProxyEvent}} or {{ProxyField}} instance for which historical-health tracking is enabled, and shall not itself invoke {{CheckMessage}}."""
                 safety = ScoreReq.Asil.B
+                note = "The historical-health context has no wire-format dependency; it only interprets the DataIntegrityStatus/SequenceStatus pair already computed by the binding's ProxyEventBinding."
+                derived_from = [Communication.E2EProtectionForEvents@1, Communication.MixedCriticalityE2ESupervision@1]
+                version = 1
+            }
+
+            ScoreReq.CompReq E2ECheckInvokedOnlyWhenNewSamplePresent {
+                description = """{{ProxyEventBinding}} shall invoke {{CheckMessage}} only for a call to {{GetNewSamples}} that actually delivers a new sample, and shall not synthesize a check result for a cycle where no new sample was received."""
+                safety = ScoreReq.Asil.B
+                note = "mw::com's reactive, event-driven consumption model has no periodic invocation-cadence contract for GetNewSamples(); a cycle where nothing new arrived has nothing for the check function to evaluate, so no empty-cycle result is produced and none is fed to historical-health tracking."
                 derived_from = [Communication.E2EProtectionForEvents@1]
                 version = 1
             }
 
-            ScoreReq.CompReq NoNewSampleFedAsNoNewDataToE2ECheck {
-                description = """When a call to {{GetNewSamples}} yields no new sample, {{ProxyEventBase}} shall feed a no-new-data indication into the E2E check for that cycle instead of skipping the check."""
+            ScoreReq.CompReq E2EHealthContextUpdatedOnlyOnCheckedSample {
+                description = """{{ProxyEventBase}} shall update the E2E historical-health context of a consuming {{ProxyEvent}} or {{ProxyField}} instance only on a {{GetNewSamples}} cycle in which the binding actually delivered and checked a new sample."""
                 safety = ScoreReq.Asil.B
+                note = "This is a narrower invocation contract than a periodic/windowed model would require, adopted deliberately since there is nothing to feed the counter on an empty cycle; no separate timer or scheduler component is needed to drive it."
                 derived_from = [Communication.E2EProtectionForEvents@1]
                 version = 1
             }
 
             ScoreReq.CompReq IndependentE2ESupervisionPerConsumer {
-                description = """The E2E state-machine outcome computed for one consuming {{ProxyEvent}} instance shall be independent of the samples observed or missed by any other consuming {{ProxyEvent}} instance of the same {{SkeletonEvent}}."""
+                description = """The E2E check outcome and historical-health state computed for one consuming {{ProxyEvent}} instance shall be independent of the samples observed or missed by any other consuming {{ProxyEvent}} instance of the same {{SkeletonEvent}}."""
                 safety = ScoreReq.Asil.B
                 derived_from = [Communication.MixedCriticalityE2ESupervision@1]
                 version = 1
@@ -50,26 +61,27 @@ section "com" {
 
         }
 
-        section "Supervision_State_Machine" {
+        section "Historical_Health_Tracking" {
 
-            ScoreReq.CompReq E2EStateMachineStates {
-                description = """The E2E supervision state machine owned by {{ProxyEventBase}} shall represent at least the following states for a supervised {{Event}} or {{Field}}: not yet initialized, no data received, initial monitoring, valid, and invalid."""
+            ScoreReq.CompReq HistoricalHealthStatusValues {
+                description = """{{HistoricalHealthStatus}} owned by {{ProxyEventBase}} shall distinguish at least the following outcomes for a supervised {{Event}} or {{Field}}: {{kDisabled}}, {{kOk}}, and {{kError}}."""
                 safety = ScoreReq.Asil.B
                 derived_from = [Communication.E2EProtectionForEvents@1]
                 version = 1
             }
 
-            ScoreReq.CompReq E2EStateMachineWindowedTransitions {
-                description = """Transitions of the E2E supervision state machine between its states shall be governed by a configurable count of consecutive valid and erroneous check outcomes observed within a configurable window, not by a single outcome."""
+            ScoreReq.CompReq HistoricalHealthHysteresisTransitions {
+                description = """{{ProxyEventBase}} shall maintain a hysteresis error counter that is incremented by a configurable {{ErrorIncrement}} on a failed per-message check and decremented by a configurable {{OkDecrement}} on a passed one, clamped so it never drops below zero; {{HistoricalHealthStatus}} shall transition to {{kError}} once the counter reaches a configurable {{ErrorThreshold}} and shall return to {{kOk}} only once the counter drops to or below a configurable {{RecoveryThreshold}} that is less than or equal to {{ErrorThreshold}}."""
                 safety = ScoreReq.Asil.B
+                note = "The gap between ErrorThreshold and RecoveryThreshold is the hysteresis band, preventing the status from flapping on a single isolated failure or recovery. This replaces a fixed-cycle windowed state machine, which would otherwise require feeding an explicit result for every reception cycle including cycles where nothing new arrived."
                 derived_from = [Communication.E2EProtectionForEvents@1]
                 version = 1
             }
 
-            ScoreReq.CompReq NoNewDataAloneDoesNotInvalidateValidState {
-                description = """While the E2E supervision state machine is in the valid state, repeated no-new-data outcomes alone shall not transition it to the invalid state."""
+            ScoreReq.CompReq NoNewDataAloneDoesNotDegradeHistoricalHealth {
+                description = """A {{GetNewSamples}} cycle that delivers no new sample shall not, by itself, change the {{HistoricalHealthStatus}} of a consuming {{ProxyEvent}} or {{ProxyField}} instance away from {{kOk}}."""
                 safety = ScoreReq.Asil.B
-                note = "Stall or dead-sender detection is out of scope for the E2E state machine and remains the responsibility of mw::com's subscription/service-availability lifecycle."
+                note = "Stall or dead-sender detection is out of scope for E2E historical-health tracking and remains the responsibility of mw::com's subscription/service-availability lifecycle (e.g. the subscription-state-change handler)."
                 derived_from = [Communication.E2EProtectionForEvents@1]
                 version = 1
             }

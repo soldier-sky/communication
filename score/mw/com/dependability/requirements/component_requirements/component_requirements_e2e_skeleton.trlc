@@ -20,30 +20,32 @@ section "com" {
 
         section "Skeleton_Side_Protect_State" {
 
-            ScoreReq.CompReq SkeletonEventOwnsE2EProtectContext {
-                description = """{{SkeletonEventBase}} shall own exactly one E2E protect context per {{SkeletonEvent}} or {{SkeletonField}} instance for which E2E protection is enabled."""
+            ScoreReq.CompReq SkeletonEventBindingOwnsE2EProtectContext {
+                description = """{{SkeletonEventBinding}} shall own exactly one E2E protect context (sender counter) per {{SkeletonEvent}} or {{SkeletonField}} instance for which E2E protection is enabled, and shall invoke {{ProtectMessage}} on it directly."""
                 safety = ScoreReq.Asil.B
+                note = "The binding is the only party holding the fully-assembled wire buffer/slot at the point ProtectMessage() must run, so the counter lives in the binding rather than in SkeletonEventBase; only the reusable CRC/counter algorithm is shared, binding-independent code."
                 derived_from = [Communication.E2EProtectionForEvents@1]
                 version = 1
             }
 
             ScoreReq.CompReq E2EProtectContextNotReplicatedPerConsumer {
-                description = """The E2E protect context owned by a {{SkeletonEventBase}} shall be shared across all consumers of the corresponding event or field; it shall not be replicated or reset per subscribing {{ProxyEvent}} or {{ProxyField}}."""
+                description = """The E2E protect context owned by a {{SkeletonEventBinding}} shall be shared across all consumers of the corresponding event or field; it shall not be replicated or reset per subscribing {{ProxyEvent}} or {{ProxyField}}."""
                 safety = ScoreReq.Asil.B
                 note = "One event stream can be delivered to many consumers (multicast/pub-sub); replicating protect state per consumer would require a distinct frame per subscriber, defeating event distribution."
                 derived_from = [Communication.E2EProtectionForEvents@1, Communication.MixedCriticalityE2ESupervision@1]
                 version = 1
             }
 
-            ScoreReq.CompReq E2EProtectionInvokedBeforeBindingSend {
-                description = """{{SkeletonEventBase}} shall invoke E2E protection on a sample and produce the resulting E2E header bytes before delegating transmission of that sample to the {{SkeletonEventBinding}}."""
+            ScoreReq.CompReq E2EProtectionInvokedInsideBindingSend {
+                description = """{{SkeletonEventBinding}} shall invoke E2E protection internally, as part of its own {{Send}} implementation, directly on the buffer or slot it already owns, without receiving precomputed E2E header bytes from the binding-independent layer."""
                 safety = ScoreReq.Asil.B
+                note = "The binding already owns every byte the CRC needs to cover (its own transport-specific prefix, the reserved header region, and the payload), so ProtectMessage() runs as a single in-place call with no cross-layer buffer handoff; SkeletonEventBase::Send()'s app-facing signature is unaffected."
                 derived_from = [Communication.E2EProtectionForEvents@1]
                 version = 1
             }
 
-            ScoreReq.CompReq BindingReceivesPrecomputedE2EHeader {
-                description = """The {{SkeletonEventBinding}} shall only place already-computed E2E header bytes into the outgoing message at the binding-specific offset; it shall not itself compute E2E protection."""
+            ScoreReq.CompReq BindingIndependentLayerHasNoE2EHeaderVisibility {
+                description = """The binding-independent layer shall neither construct, hold, nor pass E2E header bytes to {{SkeletonEventBinding}}; the E2E header shall remain entirely internal to the binding, invisible to the application and to generated code."""
                 safety = ScoreReq.Asil.B
                 derived_from = [Communication.E2EProtectionForEvents@1]
                 version = 1

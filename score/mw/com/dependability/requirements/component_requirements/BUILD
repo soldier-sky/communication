@@ -82,7 +82,7 @@ component_requirements(
     ],
     deps = [
         "//score/mw/com/dependability/assumed_system:assumed_system_requirements",
-        "//score/mw/com/dependability/requirements/feature_requirements:feature_requirements_e2e_error_handling",
+        "//score/mw/com/dependability/requirements/feature_requirements:feature_requirements_e2e",
     ],
 )
 

@@ -35,9 +35,18 @@ section "com" {
                 version = 1
             }
 
-            ScoreReq.CompReq MethodE2EStateMachineUpdatedOncePerCall {
-                description = """For a {{Method}} with E2E protection enabled, the E2E supervision state machine shall be updated once per completed request on the server side and once per completed response on the client side, instead of once per reception cycle."""
+            ScoreReq.CompReq MethodE2EHistoricalHealthUpdatedOncePerCall {
+                description = """For a {{Method}} with E2E protection enabled, the E2E historical-health tracking shall be updated once per completed request on the server side and once per completed response on the client side, instead of once per reception cycle."""
                 safety = ScoreReq.Asil.B
+                note = "A method call has no 'no new data' branch the way GetNewSamples() does for events: a call is either pending or completed, so the historical-health counter only ever advances on a completed call."
+                derived_from = [Communication.E2EProtectionForMethods@1]
+                version = 1
+            }
+
+            ScoreReq.CompReq BidirectionalMethodE2EContextOwnership {
+                description = """{{SkeletonMethodBinding}} shall own an E2E check context for the incoming request in addition to the E2E protect context it owns for the outgoing response; {{ProxyMethodBinding}} shall own an E2E protect context for the outgoing request in addition to the E2E check context it owns for the incoming response."""
+                safety = ScoreReq.Asil.B
+                note = "Unlike events and fields, a method call has no fixed protect-only/check-only direction: each side plays both roles depending on which leg of the call it is handling."
                 derived_from = [Communication.E2EProtectionForMethods@1]
                 version = 1
             }

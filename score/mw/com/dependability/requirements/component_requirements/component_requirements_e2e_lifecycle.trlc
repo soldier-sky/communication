@@ -21,23 +21,31 @@ section "com" {
         section "Context_Lifecycle" {
 
             ScoreReq.CompReq E2ECheckContextResetOnSubscriptionReestablishment {
-                description = """{{ProxyEventBase}} shall reset the E2E check and state-machine context of a consuming {{ProxyEvent}} or {{ProxyField}} instance whenever its subscription transitions from not-subscribed back to subscribed."""
+                description = """{{ProxyEventBinding}} shall reset the E2E check context (last accepted counter, CRC library context) of a consuming {{ProxyEvent}} or {{ProxyField}} instance whenever its subscription transitions from not-subscribed back to subscribed."""
                 safety = ScoreReq.Asil.B
-                note = "Without this reset, valid post-reconnection frames could be interpreted as a wrong sequence, driving the state machine to invalid even though the communication channel was correctly re-established."
+                note = "The binding owns the check context and already tracks this transition internally for its own subscription-state purposes (e.g. LoLa's SubscriptionStateMachine), so no signal from the binding-independent layer is required. Without this reset, valid post-reconnection frames could be interpreted as a sequence error."
                 derived_from = [Communication.E2EProtectionForEvents@1]
                 version = 1
             }
 
             ScoreReq.CompReq E2EProtectContextResetOnServiceReoffer {
-                description = """{{SkeletonEventBase}} shall reset the E2E protect context of a {{SkeletonEvent}} or {{SkeletonField}} instance whenever the corresponding service instance is re-offered after having stopped offering."""
+                description = """{{SkeletonEventBinding}} shall reset the E2E protect context (sender counter) of a {{SkeletonEvent}} or {{SkeletonField}} instance whenever the corresponding service instance is re-offered after having stopped offering."""
                 safety = ScoreReq.Asil.B
-                note = "The protect context is shared across all consumers of the event or field (see E2EProtectContextNotReplicatedPerConsumer); resetting it on re-offer keeps it symmetric with the per-consumer check context reset, since all subscribers are guaranteed to observe the same stop-offer/re-offer transition."
+                note = "The protect context is shared across all consumers of the event or field (see E2EProtectContextNotReplicatedPerConsumer); the binding already owns the service-offer lifecycle hooks (OfferService()/StopOfferService()) that bound this reset, so no cross-layer signal is required."
+                derived_from = [Communication.E2EProtectionForEvents@1]
+                version = 1
+            }
+
+            ScoreReq.CompReq E2EHealthContextResetOnSubscriptionStateChangeSignal {
+                description = """{{ProxyEventBase}} shall reset the E2E historical-health context of a consuming {{ProxyEvent}} or {{ProxyField}} instance whenever the binding reports, via the existing subscription-state-change signal, that the subscription transitioned from not-subscribed back to subscribed."""
+                safety = ScoreReq.Asil.B
+                note = "The historical-health context has no wire-format dependency and stays binding-independent, but still needs to know when communication continuity was intentionally broken; otherwise valid post-restart frames could be misread as sequence errors and drive historical_health toward kError even though the channel was correctly re-established. This reuses the existing ProxyEventBindingBase::GetSubscriptionState()/SetSubscriptionStateChangeHandler() callback; no new binding interface is required."
                 derived_from = [Communication.E2EProtectionForEvents@1]
                 version = 1
             }
 
             ScoreReq.CompReq E2EContextResetUsesExistingSubscriptionStateSignal {
-                description = """Resetting of E2E protect and check contexts shall be performed by the binding-independent layer using the existing subscription-state and service-offering signals, without requiring additional binding-specific support."""
+                description = """Resetting of the E2E protect and check contexts shall be performed internally by the binding using its own service-offering and subscription-state lifecycle hooks; resetting of the E2E historical-health context shall be performed by the binding-independent layer using the existing subscription-state-change signal reported by the binding; neither reset shall require additional binding-specific support beyond what is already used for subscription-state and service-offering purposes."""
                 safety = ScoreReq.Asil.B
                 derived_from = [Communication.E2EProtectionForEvents@1]
                 version = 1

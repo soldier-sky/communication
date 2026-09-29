@@ -797,6 +797,7 @@ cc_library(
         "//score/mw/com/impl:sample_reference_tracker",
         "//score/mw/com/impl/bindings/lola:event",
         "//score/mw/com/impl/bindings/mock_binding:sample_ptr",
+        "//score/mw/com/impl/e2e:e2e_result",
         "@score_baselibs//score/language/futurecpp",
     ],
 )

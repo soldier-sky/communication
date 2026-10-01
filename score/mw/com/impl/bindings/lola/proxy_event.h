@@ -16,6 +16,8 @@
 #include "score/mw/com/impl/bindings/lola/event_data_storage.h"
 #include "score/mw/com/impl/bindings/lola/event_meta_info.h"
 #include "score/mw/com/impl/bindings/lola/proxy_event_common.h"
+#include "score/mw/com/impl/configuration/e2e_event_type_deployment.h"
+#include "score/mw/com/impl/e2e/e2e_profile_stub.h"
 
 #include "score/language/safecpp/safe_math/safe_math.h"
 #include "score/memory/shared/pointer_arithmetic_util.h"
@@ -66,12 +68,22 @@ class ProxyEvent final : public ProxyEventBinding<SampleType>
     /// \param parent Parent proxy of the proxy event.
     /// \param element_fq_id The ID of the event inside the proxy type.
     /// \param event_name The name of the event inside the proxy type.
-    ProxyEvent(Proxy& parent, const ElementFqId element_fq_id, const std::string_view event_name)
+    /// \param e2e_event_deployment The event's POC E2E deployment, resolved from the same LolaServiceTypeDeployment
+    ///        the provider resolves its own copy from; empty when the event has no configured E2E profile.
+    /// \param e2e_header_storage Scaffolding-only per-slot POC header storage shared with the provider's
+    ///        SkeletonEventCommon by the harness that wires them together; null when E2E is not configured.
+    ProxyEvent(Proxy& parent,
+              const ElementFqId element_fq_id,
+              const std::string_view event_name,
+              std::optional<E2EEventTypeDeployment> e2e_event_deployment = {},
+              std::shared_ptr<e2e::HeaderStorage> e2e_header_storage = nullptr)
         : ProxyEventBinding<SampleType>{},
           proxy_event_common_{parent, element_fq_id, event_name},
           meta_info_{parent.GetEventMetaInfo(element_fq_id)},
           aligned_sample_size_{memory::shared::CalculateAlignedSize(sizeof(SampleType), alignof(SampleType))},
-          event_slots_raw_array_{InitialiseEventSlotsRawArray()}
+          event_slots_raw_array_{InitialiseEventSlotsRawArray()},
+          e2e_event_deployment_{e2e_event_deployment},
+          e2e_header_storage_{std::move(e2e_header_storage)}
     {
         parent.RegisterEvent(event_name, *this);
     }
@@ -133,6 +145,18 @@ class ProxyEvent final : public ProxyEventBinding<SampleType>
         return proxy_event_common_.GetElementFQId();
     };
 
+    /// \brief Returns this consumer's resolved POC E2E deployment, matching the provider's own resolution of the
+    ///        same event from the identical LolaServiceTypeDeployment.
+    const std::optional<E2EEventTypeDeployment>& GetE2EEventDeployment() const noexcept
+    {
+        return e2e_event_deployment_;
+    }
+
+    e2e::E2EResult GetLastE2EResult() const noexcept override
+    {
+        return last_e2e_result_;
+    }
+
   private:
     const std::uint8_t* InitialiseEventSlotsRawArray();
 
@@ -143,6 +167,10 @@ class ProxyEvent final : public ProxyEventBinding<SampleType>
     const EventMetaInfo& meta_info_;
     const std::size_t aligned_sample_size_;
     const std::uint8_t* event_slots_raw_array_;
+    std::optional<E2EEventTypeDeployment> e2e_event_deployment_;
+    std::shared_ptr<e2e::HeaderStorage> e2e_header_storage_;
+    e2e::CheckContext e2e_check_context_{};
+    e2e::E2EResult last_e2e_result_{};
 };
 
 template <typename SampleType>
@@ -240,6 +268,40 @@ inline Result<std::size_t> ProxyEvent<SampleType>::GetNewSamplesImpl(Callback&& 
         const SampleType& sample_data{*reinterpret_cast<const SampleType*>(object_start_address)};
         const EventSlotStatus event_slot_status{event_data_control_local[*slot_index_it]};
         const EventSlotStatus::EventTimeStamp sample_timestamp{event_slot_status.GetTimeStamp()};
+
+        last_e2e_result_ = e2e::E2EResult{};
+        if (e2e_event_deployment_.has_value() && (e2e_header_storage_ != nullptr) &&
+            (*slot_index_it < e2e_header_storage_->size()))
+        {
+            const e2e::ProfileConfiguration profile_config{e2e_event_deployment_->data_id_,
+                                                            e2e_event_deployment_->max_delta_counter_};
+            auto& header = (*e2e_header_storage_)[*slot_index_it];
+            const score::cpp::span<const std::byte> header_span{header.data(), header.size()};
+            // Suppress "AUTOSAR C++14 M5-2-8": payload bytes are read only for the POC checksum.
+            // coverity[autosar_cpp14_m5_2_8_violation]
+            const score::cpp::span<const std::byte> payload_span{reinterpret_cast<const std::byte*>(&sample_data),
+                                                                  sizeof(SampleType)};
+            const auto outcome = e2e::CheckMessage(header_span, payload_span, profile_config, e2e_check_context_);
+            const bool sequence_ok = (outcome.sequence == e2e::SequenceStatus::kOk) ||
+                                     (outcome.sequence == e2e::SequenceStatus::kOkGapWithinThreshold);
+            last_e2e_result_.data_integrity = outcome.data_integrity;
+            last_e2e_result_.sequence = outcome.sequence;
+            last_e2e_result_.historical_health = e2e::HistoricalHealthStatus::kDisabled;
+            last_e2e_result_.summary = ((outcome.data_integrity == e2e::DataIntegrityStatus::kOk) && sequence_ok)
+                                           ? e2e::Summary::kOk
+                                           : e2e::Summary::kError;
+            if (last_e2e_result_.summary == e2e::Summary::kError)
+            {
+                score::mw::log::LogWarn("lola")
+                    << "E2E check failed: slot" << *slot_index_it << "data_integrity"
+                    << static_cast<std::uint8_t>(outcome.data_integrity) << "sequence"
+                    << static_cast<std::uint8_t>(outcome.sequence);
+            }
+            else
+            {
+                score::mw::log::LogDebug("lola") << "E2E check passed: slot" << *slot_index_it;
+            }
+        }
 
         SamplePtr<SampleType> sample{&sample_data, event_data_control_local, *slot_index_it};
 

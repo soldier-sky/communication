@@ -39,7 +39,9 @@ void SkeletonEventFixture::InitialiseSkeletonEvent(const ElementFqId element_fq_
                                                    const bool enforce_max_samples,
                                                    impl::tracing::SkeletonEventTracingData skeleton_event_tracing_data,
                                                    const bool field_getter_enabled,
-                                                   std::optional<InstanceIdentifier> instance_identifier)
+                                                   std::optional<InstanceIdentifier> instance_identifier,
+                                                   std::optional<E2EEventTypeDeployment> e2e_event_deployment,
+                                                   std::shared_ptr<e2e::HeaderStorage> e2e_header_storage)
 {
     // We defer initialisation of the Skeleton to InitialiseSkeletonEvent to allow test fixtures to set any mocked
     // expectations before creating the skeleton.
@@ -60,9 +62,15 @@ void SkeletonEventFixture::InitialiseSkeletonEvent(const ElementFqId element_fq_
         *skeleton_,
         element_fq_id,
         service_element_name,
-        SkeletonEventProperties{
-            max_samples, 0U, number_of_field_getter_slots, false, max_subscribers, enforce_max_samples},
-        skeleton_event_tracing_data);
+        SkeletonEventProperties{max_samples,
+                                0U,
+                                number_of_field_getter_slots,
+                                false,
+                                max_subscribers,
+                                enforce_max_samples,
+                                e2e_event_deployment},
+        skeleton_event_tracing_data,
+        std::move(e2e_header_storage));
 }
 
 EventControl* SkeletonEventFixture::GetEventControl(const ElementFqId element_fq_id,

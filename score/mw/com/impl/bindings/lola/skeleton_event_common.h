@@ -25,6 +25,7 @@
 #include "score/mw/com/impl/bindings/lola/transaction_log_registration_guard.h"
 #include "score/mw/com/impl/bindings/lola/type_erased_sample_ptrs_guard.h"
 #include "score/mw/com/impl/configuration/quality_type.h"
+#include "score/mw/com/impl/e2e/e2e_profile_stub.h"
 #include "score/mw/com/impl/generic_skeleton_event_binding.h"
 #include "score/mw/com/impl/plumbing/sample_allocatee_ptr.h"
 #include "score/mw/com/impl/runtime.h"
@@ -36,8 +37,10 @@
 #include <score/utility.hpp>
 
 #include <atomic>
+#include <memory>
 #include <optional>
 #include <tuple>
+#include <type_traits>
 
 namespace score::mw::com::impl::lola
 {
@@ -69,7 +72,8 @@ class SkeletonEventCommon
                         const std::string_view event_name,
                         const SkeletonEventProperties& event_properties,
                         const ElementFqId& element_fq_id,
-                        impl::tracing::SkeletonEventTracingData tracing_data) noexcept;
+                        impl::tracing::SkeletonEventTracingData tracing_data,
+                        std::shared_ptr<e2e::HeaderStorage> e2e_header_storage = nullptr) noexcept;
 
     SkeletonEventCommon(const SkeletonEventCommon&) = delete;
     SkeletonEventCommon(SkeletonEventCommon&&) noexcept = delete;
@@ -199,6 +203,11 @@ class SkeletonEventCommon
     std::optional<tracing::TypeErasedSamplePtrsGuard> type_erased_sample_ptrs_guard_{};
     std::optional<ReceiveHandlerRegistrationChangedCallback> receive_handler_registration_changed_callback_;
 
+    /// \brief Injected, scaffolding-only per-slot POC E2E header storage; shared with consuming proxy events by the
+    ///        harness that wires them together. Null when the event has no configured E2E profile.
+    std::shared_ptr<e2e::HeaderStorage> e2e_header_storage_;
+    e2e::ProtectContext e2e_protect_context_{};
+
     void EmplaceTypeErasedSamplePtrsGuard();
     void UpdateCurrentTimestamp();
     void SetQmNotificationsRegistered(bool value);
@@ -211,7 +220,8 @@ SkeletonEventCommon<SampleType>::SkeletonEventCommon(Skeleton& parent,
                                                      const std::string_view event_name,
                                                      const SkeletonEventProperties& event_properties,
                                                      const ElementFqId& element_fq_id,
-                                                     impl::tracing::SkeletonEventTracingData tracing_data) noexcept
+                                                     impl::tracing::SkeletonEventTracingData tracing_data,
+                                                     std::shared_ptr<e2e::HeaderStorage> e2e_header_storage) noexcept
     : parent_{parent},
       event_name_{event_name},
       event_properties_{event_properties},
@@ -221,7 +231,8 @@ SkeletonEventCommon<SampleType>::SkeletonEventCommon(Skeleton& parent,
       tracing_data_{tracing_data},
       qm_disconnect_{false},
       field_getter_enabled_{event_properties_.GetNumberOfFieldGetterSlots() > 0U},
-      getter_sample_tracker_{kMaxConcurrentFieldGetterSamplePtrs}
+      getter_sample_tracker_{kMaxConcurrentFieldGetterSamplePtrs},
+      e2e_header_storage_{std::move(e2e_header_storage)}
 {
 }
 
@@ -398,6 +409,32 @@ Result<void> SkeletonEventCommon<SampleType>::Send(impl::SampleAllocateePtr<Samp
     // The "ptr" variable is checked before dereferencing.
     // coverity[autosar_cpp14_a5_3_2_violation]
     auto slot = ptr->GetReferencedSlot();
+
+    // Suppress The rule AUTOSAR C++14 M0-1-9: "There shall be no dead code.". Not dead: the discarded branch differs
+    // per SampleType instantiation (GenericSkeletonEvent instantiates this with SampleType = void, for which the E2E
+    // POC payload access below would be ill-formed).
+    if constexpr (!std::is_void_v<SampleType>)
+    {
+        if (event_properties_.GetE2EEventDeployment().has_value() && (e2e_header_storage_ != nullptr) &&
+            (slot < e2e_header_storage_->size()))
+        {
+            const auto& e2e_event_deployment = event_properties_.GetE2EEventDeployment().value();
+            const e2e::ProfileConfiguration profile_config{e2e_event_deployment.data_id_,
+                                                            e2e_event_deployment.max_delta_counter_};
+            auto& header = (*e2e_header_storage_)[slot];
+            const score::cpp::span<std::byte> header_span{header.data(), header.size()};
+            // Suppress "AUTOSAR C++14 M5-2-8": payload bytes are read only for the POC checksum, never reinterpreted.
+            // coverity[autosar_cpp14_m5_2_8_violation]
+            const score::cpp::span<const std::byte> payload_span{reinterpret_cast<const std::byte*>(ptr->get()),
+                                                                  sizeof(SampleType)};
+            const auto counter_used = e2e_protect_context_.next_counter;
+            score::cpp::ignore = e2e::ProtectMessage(header_span, payload_span, profile_config, e2e_protect_context_);
+            score::mw::log::LogDebug("lola") << "E2E protect: element" << element_fq_id_ << "slot" << slot
+                                             << "data_id" << e2e_event_deployment.data_id_ << "counter"
+                                             << counter_used;
+        }
+    }
+
     // Suppress "AUTOSAR C++14 A4-7-1" rule finding. This rule states: "An integer expression shall
     // not lead to data loss.".
     // The current logic will not exceed the maximum value.

@@ -70,7 +70,8 @@ class SkeletonEvent final : public SkeletonEventBinding<SampleType>
                   const ElementFqId element_fq_id,
                   const std::string_view event_name,
                   const SkeletonEventProperties properties,
-                  impl::tracing::SkeletonEventTracingData skeleton_event_tracing_data) noexcept;
+                  impl::tracing::SkeletonEventTracingData skeleton_event_tracing_data,
+                  std::shared_ptr<e2e::HeaderStorage> e2e_header_storage = nullptr) noexcept;
 
     SkeletonEvent(const SkeletonEvent&) = delete;
     SkeletonEvent(SkeletonEvent&&) noexcept = delete;
@@ -118,10 +119,11 @@ SkeletonEvent<SampleType>::SkeletonEvent(Skeleton& parent,
                                          const ElementFqId element_fq_id,
                                          const std::string_view event_name,
                                          const SkeletonEventProperties properties,
-                                         impl::tracing::SkeletonEventTracingData skeleton_event_tracing_data) noexcept
+                                         impl::tracing::SkeletonEventTracingData skeleton_event_tracing_data,
+                                         std::shared_ptr<e2e::HeaderStorage> e2e_header_storage) noexcept
     : SkeletonEventBinding<SampleType>{},
       event_data_storage_{nullptr},
-      skeleton_event_common_{parent, event_name, properties, element_fq_id, skeleton_event_tracing_data}
+      skeleton_event_common_{parent, event_name, properties, element_fq_id, skeleton_event_tracing_data, std::move(e2e_header_storage)}
 {
 }
 

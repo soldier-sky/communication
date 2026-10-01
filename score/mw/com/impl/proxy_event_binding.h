@@ -13,6 +13,7 @@
 #ifndef SCORE_MW_COM_IMPL_PROXY_EVENT_BINDING_H
 #define SCORE_MW_COM_IMPL_PROXY_EVENT_BINDING_H
 
+#include "score/mw/com/impl/e2e/e2e_result.h"
 #include "score/mw/com/impl/plumbing/sample_ptr.h"
 #include "score/mw/com/impl/proxy_event_binding_base.h"
 #include "score/mw/com/impl/sample_reference_tracker.h"
@@ -41,9 +42,11 @@ class ProxyEventBinding : public ProxyEventBindingBase
   public:
     /// Type-erased callback used for the GetNewSamples method.
     ///
-    /// The size of 80U is chosen to allow us to store another score::cpp::callback within this callback. This is needed
-    /// as we wrap the user provided callback in order to perform tracing functionality.
-    using Callback = score::cpp::callback<void(SamplePtr<SampleType>, tracing::ITracingRuntime::TracePointDataId), 80U>;
+    /// The size of 112U is chosen to allow us to store another score::cpp::callback within this callback (used to
+    /// perform tracing functionality), plus the POC E2E-attach wrapper's own captures (a `this` pointer and a
+    /// binding pointer, ~16 bytes, rounded to 112 bytes to the next 16-byte-aligned step) that additionally
+    ///  wrap the user-provided callback in ProxyEvent<SampleType>::GetNewSamples().
+    using Callback = score::cpp::callback<void(SamplePtr<SampleType>, tracing::ITracingRuntime::TracePointDataId), 112U>;
 
     /// \brief Get pending data from the event.
     ///
@@ -55,6 +58,14 @@ class ProxyEventBinding : public ProxyEventBindingBase
     /// \param reference_tracker Tracker that is used to produce reference counted SamplePtrs.
     /// \return Number of samples that were handed over to the callable.
     virtual Result<std::size_t> GetNewSamples(Callback&& receiver, TrackerGuardFactory& tracker) noexcept = 0;
+
+    /// \brief Returns the POC E2E result computed for the sample most recently delivered by GetNewSamples(), or a
+    ///        disabled result if this event has no configured E2E profile. Bindings without E2E support keep the
+    ///        default (disabled) implementation.
+    virtual e2e::E2EResult GetLastE2EResult() const noexcept
+    {
+        return {};
+    }
 
   protected:
     ProxyEventBinding() = default;

@@ -514,6 +514,7 @@ cc_library(
         ":proxy_event_binding",
         ":sample_reference_tracker",
         "//score/mw/com/impl/mocking:i_proxy_event",
+        "//score/mw/com/impl/plumbing:sample_ptr",
         "//score/mw/com/impl/tracing:proxy_event_tracing_data",
         "@score_baselibs//score/language/safecpp/scoped_function:scope",
     ],
@@ -633,6 +634,7 @@ cc_library(
         ":subscription_state",
         ":subscription_state_change_handler",
         "//score/mw/com/impl/configuration",
+        "//score/mw/com/impl/e2e:e2e_result",
         "//score/mw/com/impl/plumbing:sample_ptr",
         "//score/mw/com/impl/tracing:i_tracing_runtime",
         "@score_baselibs//score/language/futurecpp",
@@ -1345,6 +1347,15 @@ cc_unit_test(
         "//score/mw/com/impl/test:binding_factory_resources",
         "//score/mw/com/impl/test:proxy_resources",
         "//score/mw/com/impl/test:runtime_mock_guard",
+    ],
+)
+
+cc_unit_test(
+    name = "proxy_event_e2e_attach_test",
+    srcs = ["proxy_event_e2e_attach_test.cpp"],
+    deps = [
+        ":proxy_event",
+        "//score/mw/com/impl/bindings/mock_binding",
     ],
 )
 

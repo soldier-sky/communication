@@ -210,11 +210,21 @@ Result<std::size_t> ProxyEvent<SampleType>::GetNewSamples(F&& receiver, std::siz
         return MakeUnexpected(ComErrc::kMaxSamplesReached);
     }
 
-    auto tracing_receiver = tracing::CreateTracingGetNewSamplesCallback<SampleType, F>(
-        tracing_data_, *binding_base_, std::forward<F>(receiver));
+    auto* const typed_binding = GetTypedEventBinding();
+
+    // Attach the POC E2E result computed by the binding for this sample before forwarding it, mirroring the
+    // existing tracing wrapper's interception point.
+    auto e2e_receiver = [this, typed_binding, receiver = std::forward<F>(receiver)](
+                            SamplePtr<SampleType> sample_ptr) noexcept {
+        this->AttachE2EResult(sample_ptr, typed_binding->GetLastE2EResult());
+        receiver(std::move(sample_ptr));
+    };
+
+    auto tracing_receiver =
+        tracing::CreateTracingGetNewSamplesCallback<SampleType>(tracing_data_, *binding_base_, std::move(e2e_receiver));
 
     const auto get_new_samples_result =
-        GetTypedEventBinding()->GetNewSamples(std::move(tracing_receiver), guard_factory);
+        typed_binding->GetNewSamples(std::move(tracing_receiver), guard_factory);
     if (!get_new_samples_result.has_value())
     {
         if (get_new_samples_result.error() == ComErrc::kNotSubscribed)
